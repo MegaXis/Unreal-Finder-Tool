@@ -271,10 +271,16 @@ bool Utils::IsValidRemotePointer(const uintptr_t pointer, uintptr_t *address)
 	return false;
 }
 
-bool Utils::IsValidGNamesAddress(const uintptr_t address)
+bool Utils::IsValidGNamesAddress(uintptr_t address, const bool chunkCheck)
 {
 	if (MemoryObj == nullptr || !IsValidRemoteAddress(MemoryObj, address))
 		return false;
+
+	if (!chunkCheck && !IsValidRemoteAddress(MemoryObj, MemoryObj->ReadAddress(address)))
+		return false;
+
+	if (!chunkCheck)
+		address = MemoryObj->ReadAddress(address);
 
 	int null_count = 0;
 
@@ -282,8 +288,8 @@ bool Utils::IsValidGNamesAddress(const uintptr_t address)
 	for (int read_address = 0; read_address <= 50; ++read_address)
 	{
 		// Read Chunk Address
-		auto offset = size_t(read_address * PointerSize());
-		uintptr_t chunk_address = MemoryObj->ReadAddress(address + offset);
+		const auto offset = size_t(read_address * PointerSize());
+		const uintptr_t chunk_address = MemoryObj->ReadAddress(address + offset);
 		if (chunk_address == NULL)
 			++null_count;
 	}
@@ -292,14 +298,40 @@ bool Utils::IsValidGNamesAddress(const uintptr_t address)
 		return false;
 
 	// Read First FName Address
-	uintptr_t noneFName = MemoryObj->ReadAddress(MemoryObj->ReadAddress(address));
+	const uintptr_t noneFName = MemoryObj->ReadAddress(MemoryObj->ReadAddress(address));
 	if (!IsValidRemoteAddress(MemoryObj, noneFName)) return false;
 
 	// Search for none FName
-	auto pattern = PatternScan::Parse("NoneSig", 0, "4E 6F 6E 65 00", 0xFF);
-	auto result = PatternScan::FindPattern(MemoryObj, noneFName, noneFName + 0x50, { pattern }, true);
-	auto resVec = result.find("NoneSig")->second;
+	const auto pattern = PatternScan::Parse("NoneSig", 0, "4E 6F 6E 65 00", 0xFF);
+	const auto result = PatternScan::FindPattern(MemoryObj, noneFName, noneFName + 0x50, { pattern }, true);
+	const auto resVec = result.find("NoneSig")->second;
 	return !resVec.empty();
+}
+
+bool Utils::IsValidGNamesAddress(const uintptr_t address)
+{
+	return IsValidGNamesAddress(address, false);
+}
+
+bool Utils::IsValidGNamesChunksAddress(const uintptr_t address)
+{
+	return IsValidGNamesAddress(address, true);
+}
+
+size_t Utils::CalcNameOffset(const uintptr_t address)
+{
+	uintptr_t curAddress = address;
+	MEMORY_BASIC_INFORMATION info;
+
+	while (
+		VirtualQueryEx(MemoryObj->ProcessHandle, reinterpret_cast<LPVOID>(curAddress), &info, sizeof info) == sizeof(info) &&
+		info.BaseAddress != reinterpret_cast<PVOID>(curAddress) &&
+		curAddress >= address - 0x10)
+	{
+		--curAddress;
+	}
+
+	return address - curAddress;
 }
 
 bool Utils::IsValidGObjectsAddress(const uintptr_t address, bool* isChunks)

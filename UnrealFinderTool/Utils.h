@@ -113,6 +113,8 @@ public:
 	static bool IsValidRemotePointer(uintptr_t pointer, uintptr_t *address = nullptr);
 	// Check if Address is point GNames Array
 	static bool IsValidGNamesAddress(uintptr_t address);
+	static bool IsValidGNamesChunksAddress(uintptr_t address);
+	static size_t CalcNameOffset(uintptr_t address);
 	// Check if Address is point GObjects Array
 	static bool IsValidGObjectsAddress(uintptr_t address, bool* isChunks = nullptr);
 	// Sleep when counter hit each selected ms
@@ -146,6 +148,8 @@ private:
 	/// <param name="varOffset">Offset to variable based on `structBase`</param>
 	/// <param name="structSize">Size of struct</param>
 	static void FixStructPointer(void* structBase, int varOffset, size_t structSize);
+
+	static bool IsValidGNamesAddress(uintptr_t address, bool chunkCheck);
 };
 
 template <typename ElementType>

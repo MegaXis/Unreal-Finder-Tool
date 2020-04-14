@@ -40,26 +40,32 @@ std::vector<uintptr_t> GNamesFinder::Find()
 
 	// Calc Name Offset
 	if (!cmp3.empty())
-	{
-		// None == 0
-		auto byte = PatternScan::Parse("Byte", 0, "42 79 74 65 50 72 6F 70 65 72 74 79 00", 0xFF);
-		auto result = PatternScan::FindPattern(Utils::MemoryObj, cmp3[0], cmp3[0] + 0x200, { byte }, true);
-		auto it = result.find("Byte");
-		if (it != result.end() && !it->second.empty())
-		{
-			byteAddress = it->second.front();
-			auto byte_index = PatternScan::Parse("ByteIndex", 0, "02 00 00 00", 0xFF);
-			result = PatternScan::FindPattern(Utils::MemoryObj, byteAddress - 0x20, byteAddress, { byte_index }, true);
-			it = result.find("ByteIndex");
-			if (it != result.end() && !it->second.empty())
-				nameOffset = byteAddress - it->second.front();
-		}
-	}
+		nameOffset = Utils::CalcNameOffset(cmp3[0]);
 
-	for (uintptr_t i : cmp3)
+	// Get Static Address
 	{
-		i = i - nameOffset;
-		ret.push_back(GetChunksAddress(i));
+		using namespace Hyperscan;
+		std::vector<uintptr_t> search_result;
+		for (size_t index = 0; index < cmp3.size(); ++index)
+		{
+			auto scanVal = GetChunksAddress(cmp3[index] - nameOffset);
+
+			auto address_holder = HYPERSCAN_SCANNER::Scan(Utils::MemoryObj->ProcessId, scanVal,
+				Utils::MemoryObj->Is64Bit ? HyperscanAllignment8Bytes : HyperscanAllignment4Bytes, HyperscanTypeExact);
+
+			if (address_holder.empty())
+			{
+				ret.erase(index == 0 ? ret.begin() : ret.begin() + index);
+				continue;
+			}
+
+			for (size_t iStatic = 0; iStatic < address_holder.size() && iStatic < 3; ++iStatic)
+			{
+				search_result.push_back(address_holder[iStatic]);
+			}
+		}
+
+		ret.insert(ret.end(), search_result.begin(), search_result.end());
 	}
 
 	return ret;
